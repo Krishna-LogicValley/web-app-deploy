@@ -1,7 +1,25 @@
+"use client";
+import { useState } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
 
 export default function Home() {
+  const [url, setUrl] = useState("");
+
+  const deploy = async () => {
+    setUrl("Deploying... ⏳");
+
+    const res = await fetch("/api/deploy", { method: "POST" });
+    const data = await res.json();
+
+    if (data.success) {
+      setUrl(data.url);
+      navigator.clipboard.writeText(data.url);
+      alert("Deployment ready & copied 🚀");
+    } else {
+      setUrl("Failed to get deployment URL ❌");
+    }
+  };
   return (
     <div className={styles.page}>
       <main className={styles.main}>
@@ -36,12 +54,7 @@ export default function Home() {
           </p>
         </div>
         <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+          <a className={styles.primary} onClick={deploy}>
             <Image
               className={styles.logo}
               src="/vercel.svg"
@@ -51,14 +64,7 @@ export default function Home() {
             />
             Deploy Now
           </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+          <input value={url} readOnly style={{ width: 400, marginTop: 10 }} />
         </div>
       </main>
     </div>
