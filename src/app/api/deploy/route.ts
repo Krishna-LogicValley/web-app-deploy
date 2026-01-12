@@ -2,60 +2,70 @@ const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 export async function POST() {
   try {
-    const deployHook = process.env.VERCEL_DEPLOY_HOOK_URL!;
-    const token = process.env.VERCEL_TOKEN!;
-    const projectId = process.env.VERCEL_PROJECT_ID!;
-    const teamId = process.env.VERCEL_TEAM_ID;
+    const HOOK = process.env.VERCEL_DEPLOY_HOOK_URL!;
+    const TOKEN = process.env.VERCEL_TOKEN!;
+    const PROJECT = process.env.VERCEL_PROJECT_ID!;
+    const TEAM = process.env.VERCEL_TEAM_ID
+      ? `&teamId=${process.env.VERCEL_TEAM_ID}`
+      : "";
 
-    // 1️⃣ Record current time (so we know which deployment is ours)
-    const startedAt = Date.now();
+    const started = Date.now();
 
-    // 2️⃣ Trigger deployment
-    await fetch(deployHook, { method: "POST" });
+    // Trigger deployment
+    await fetch(HOOK, { method: "POST" });
 
-    let deploymentUrl = null;
+    await sleep(4000); // give vercel time to register deployment
 
-    // 3️⃣ Poll for up to 5 minutes
-    for (let i = 0; i < 150; i++) {
-      // 150 × 2s ≈ 5 minutes
+    let deploymentId: string | null = null;
+
+    // Find latest production deployment
+    for (let i = 0; i < 30; i++) {
       const res = await fetch(
-        `https://api.vercel.com/v13/deployments?projectId=${projectId}${
-          teamId ? `&teamId=${teamId}` : ""
-        }`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        `https://api.vercel.com/v6/deployments?projectId=${PROJECT}${TEAM}&target=production&since=${
+          started - 10000
+        }&limit=5`,
+        { headers: { Authorization: `Bearer ${TOKEN}` } }
       );
 
       const data = await res.json();
+      const latest = data.deployments?.[0];
 
-      const latest = data.deployments?.find(
-        (d: any) => d.createdAt > startedAt // only deployments after button click
-      );
-
-      if (!latest) {
-        await sleep(2000);
-        continue;
-      }
-
-      if (latest.readyState === "READY") {
-        deploymentUrl = `https://${latest.url}`;
+      if (latest) {
+        deploymentId = latest.uid;
         break;
-      }
-
-      if (["ERROR", "CANCELED"].includes(latest.readyState)) {
-        return Response.json({ success: false, message: latest.readyState });
       }
 
       await sleep(2000);
     }
 
-    if (!deploymentUrl)
-      return Response.json({ success: false, message: "Deployment timed out" });
+    if (!deploymentId) {
+      return Response.json({
+        success: false,
+        message: "No deployment detected",
+      });
+    }
 
-    return Response.json({ success: true, url: deploymentUrl });
+    // Poll that deployment
+    for (let i = 0; i < 300; i++) {
+      const res = await fetch(
+        `https://api.vercel.com/v6/deployments/${deploymentId}?projectId=${PROJECT}${TEAM}`,
+        { headers: { Authorization: `Bearer ${TOKEN}` } }
+      );
+
+      const dep = await res.json();
+
+      if (dep.readyState === "READY") {
+        return Response.json({ success: true, url: `https://${dep.url}` });
+      }
+
+      if (["ERROR", "CANCELED"].includes(dep.readyState)) {
+        return Response.json({ success: false, message: dep.readyState });
+      }
+
+      await sleep(2000);
+    }
+
+    return Response.json({ success: false, message: "Deployment timed out" });
   } catch (err) {
     return Response.json(
       { success: false, message: "Server Error" },
