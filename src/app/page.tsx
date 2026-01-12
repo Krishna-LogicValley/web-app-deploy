@@ -28,17 +28,24 @@ export default function Home() {
         </div>
         <div className={styles.ctas}>
           <a className={styles.primary} onClick={deploy}>
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
             Deploy Now
           </a>
-          <input value={url} readOnly style={{ width: 400, marginTop: 10 }} />
         </div>
+        <input
+          value={url}
+          readOnly
+          style={{
+            width: "100%",
+            height: 40,
+            paddingLeft: "1rem",
+            borderRadius: 8,
+            outline: "none",
+            border: "1px solid #ccc",
+            color: "#000",
+            fontWeight: 600,
+            letterSpacing: 0.5,
+          }}
+        />
       </main>
     </div>
   );
