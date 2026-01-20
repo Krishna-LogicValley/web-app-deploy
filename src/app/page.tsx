@@ -5,6 +5,7 @@ import styles from "./page.module.css";
 
 export default function Home() {
   const [url, setUrl] = useState("");
+  const isLocal = process.env.NODE_ENV === "development";
 
   const deploy = async () => {
     setUrl("Deployment started… ⏳");
@@ -29,26 +30,30 @@ export default function Home() {
             Azure
           </h1>
         </div>
-        <div className={styles.ctas}>
-          <a className={styles.primary} onClick={deploy}>
-            Deploy Now
-          </a>
-        </div>
-        <input
-          value={url}
-          readOnly
-          style={{
-            width: "100%",
-            height: 40,
-            paddingLeft: "1rem",
-            borderRadius: 8,
-            outline: "none",
-            border: "1px solid #ccc",
-            color: "#000",
-            fontWeight: 600,
-            letterSpacing: 0.5,
-          }}
-        />
+        {isLocal && (
+          <>
+            <div className={styles.ctas}>
+              <a className={styles.primary} onClick={deploy}>
+                Deploy Now
+              </a>
+            </div>
+            <input
+              value={url}
+              readOnly
+              style={{
+                width: "100%",
+                height: 40,
+                paddingLeft: "1rem",
+                borderRadius: 8,
+                outline: "none",
+                border: "1px solid #ccc",
+                color: "#000",
+                fontWeight: 600,
+                letterSpacing: 0.5,
+              }}
+            />
+          </>
+        )}
       </main>
     </div>
   );
