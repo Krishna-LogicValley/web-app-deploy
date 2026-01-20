@@ -1,72 +1,94 @@
-const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export async function POST() {
   try {
-    const HOOK = process.env.VERCEL_DEPLOY_HOOK_URL!;
-    const TOKEN = process.env.VERCEL_TOKEN!;
-    const PROJECT = process.env.VERCEL_PROJECT_ID!;
-    const TEAM = process.env.VERCEL_TEAM_ID
-      ? `&teamId=${process.env.VERCEL_TEAM_ID}`
-      : "";
+    const OWNER = process.env.GITHUB_OWNER!;
+    const REPO = process.env.GITHUB_REPO!;
+    const WORKFLOW = process.env.GITHUB_WORKFLOW!;
+    const TOKEN = process.env.GITHUB_TOKEN!;
+    const PROD_URL = process.env.AZURE_SWA_URL!;
+    const BRANCH = "static-web-app-deploy";
 
-    const started = Date.now();
+    const headers = {
+      Authorization: `Bearer ${TOKEN}`,
+      Accept: "application/vnd.github+json",
+      "Content-Type": "application/json",
+    };
 
-    // Trigger deployment
-    await fetch(HOOK, { method: "POST" });
+    // 1️⃣ Trigger workflow
+    const triggerRes = await fetch(
+      `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/dispatches`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ref: BRANCH }),
+      }
+    );
 
-    await sleep(4000); // give vercel time to register deployment
+    const triggerText = await triggerRes.text();
+    console.log("Trigger:", triggerRes.status, triggerText);
 
-    let deploymentId: string | null = null;
+    if (!triggerRes.ok) {
+      return Response.json({
+        success: false,
+        message: `GitHub trigger failed: ${triggerRes.status}`,
+      });
+    }
 
-    // Find latest production deployment
-    for (let i = 0; i < 30; i++) {
-      const res = await fetch(
-        `https://api.vercel.com/v6/deployments?projectId=${PROJECT}${TEAM}&target=production&since=${
-          started - 10000
-        }&limit=5`,
-        { headers: { Authorization: `Bearer ${TOKEN}` } }
+    await sleep(5000);
+
+    let runId: number | null = null;
+
+    // 2️⃣ Find latest run for this workflow
+    for (let i = 0; i < 25; i++) {
+      const runsRes = await fetch(
+        `https://api.github.com/repos/${OWNER}/${REPO}/actions/workflows/${WORKFLOW}/runs`,
+        { headers }
       );
 
-      const data = await res.json();
-      const latest = data.deployments?.[0];
+      const runs = await runsRes.json();
+      const latest = runs.workflow_runs?.[0];
 
       if (latest) {
-        deploymentId = latest.uid;
+        runId = latest.id;
         break;
       }
 
       await sleep(2000);
     }
 
-    if (!deploymentId) {
+    if (!runId)
       return Response.json({
         success: false,
-        message: "No deployment detected",
+        message: "No workflow run found",
       });
-    }
 
-    // Poll that deployment
-    for (let i = 0; i < 300; i++) {
-      const res = await fetch(
-        `https://api.vercel.com/v6/deployments/${deploymentId}?projectId=${PROJECT}${TEAM}`,
-        { headers: { Authorization: `Bearer ${TOKEN}` } }
+    // 3️⃣ Poll run status
+    for (let i = 0; i < 180; i++) {
+      const runRes = await fetch(
+        `https://api.github.com/repos/${OWNER}/${REPO}/actions/runs/${runId}`,
+        { headers }
       );
 
-      const dep = await res.json();
+      const run = await runRes.json();
 
-      if (dep.readyState === "READY") {
-        return Response.json({ success: true, url: `https://${dep.url}` });
+      if (run.status === "completed") {
+        if (run.conclusion === "success") {
+          return Response.json({ success: true, url: PROD_URL });
+        }
+
+        return Response.json({
+          success: false,
+          message: "Deployment failed ❌",
+        });
       }
 
-      if (["ERROR", "CANCELED"].includes(dep.readyState)) {
-        return Response.json({ success: false, message: dep.readyState });
-      }
-
-      await sleep(2000);
+      await sleep(4000);
     }
 
-    return Response.json({ success: false, message: "Deployment timed out" });
+    return Response.json({ success: false, message: "Timeout ⏳" });
   } catch (err) {
+    console.error(err);
     return Response.json(
       { success: false, message: "Server Error" },
       { status: 500 }
