@@ -25,10 +25,7 @@ export default function Home() {
     <div className={styles.page}>
       <main className={styles.main}>
         <div className={styles.intro}>
-          <h1>
-            Click Below Button to Automatically Deploy Your App on MicroSoft
-            Azure
-          </h1>
+          <h1>Static Web App deployed on Azure Static Web Apps</h1>
         </div>
         {isLocal && (
           <>
